@@ -7,6 +7,10 @@ import lightgbm as lgb
 
 # ---------------- Load data ----------------
 data = pd.read_csv("internship.csv", encoding='latin1')
+# Keep original text columns for filtering & output
+data['Sector_raw'] = data['Sector'].astype(str)
+data['location_raw'] = data['location'].astype(str)
+
 
 # --- Clean stipend ---
 data['stipend'] = data['stipend'].apply(lambda x: '0' if 'Unpaid' in str(x) else x)
@@ -83,23 +87,32 @@ location = input("Enter location: ")
 user_sector = encoders['Sector'].transform([sector])[0] if sector in encoders['Sector'].classes_ else 0
 user_location = encoders['location'].transform([location])[0] if location in encoders['location'].classes_ else 0
 
-# ---------------- Scoring internships ----------------
-data['score'] = model.predict_proba(X)[:, 1]
-top_internships = data.sort_values(by='score', ascending=False).head(3)
+# ---------------- Filter by sector and location of interest ----------------
+filtered_data = data[
+    (data['Sector_raw'].str.contains(sector, case=False, na=False)) &
+    (data['location_raw'].str.contains(location, case=False, na=False))
+].copy()
 
-# ---------------- Map back encoded values ----------------
-# Reverse mapping for categorical columns
-for col, encoder in encoders.items():
-    reverse_map = {i: label for i, label in enumerate(encoder.classes_)}
-    top_internships[col] = top_internships[col].map(reverse_map)
+if filtered_data.empty:
+    print(f"\n⚠️ No internships found for sector '{sector}' in location '{location}'. Showing top internships overall instead.")
+    filtered_data = data.copy()
+
+# ---------------- Score internships ----------------
+filtered_data['score'] = model.predict_proba(filtered_data[features].fillna(0))[:, 1]
+top_internships = filtered_data.sort_values(by='score', ascending=False).head(3)
+
+# ---------------- Use original text values for output ----------------
+columns_to_show = ['Sector_raw', 'location_raw', 'min stipend', 'max stipend', 'duration', 'score']
+best_internships_json = top_internships[columns_to_show].rename(columns={
+    "Sector_raw": "Sector",
+    "location_raw": "location"
+}).to_dict(orient="records")
 
 # ---------------- Save & print ----------------
-columns_to_show = ['Sector', 'location', 'min stipend', 'max stipend', 'duration', 'score']
-best_internships_json = top_internships[columns_to_show].to_dict(orient="records")
-
 with open('output.json', 'w', encoding='utf-8') as f:
     f.write(json.dumps(best_internships_json, indent=4, ensure_ascii=False))
 
 print("\n🎯 Recommended Internships:")
 print(json.dumps(best_internships_json, indent=4, ensure_ascii=False))
+
 
