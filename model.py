@@ -1,5 +1,8 @@
 import pandas as pd
 import json
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import precision_score, recall_score, f1_score, confusion_matrix
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, roc_auc_score, classification_report
@@ -7,7 +10,7 @@ import lightgbm as lgb
 
 # ---------------- Load data ----------------
 data = pd.read_csv("internship.csv", encoding='latin1')
-# Keep original text columns for filtering & output
+
 data['Sector_raw'] = data['Sector'].astype(str)
 data['location_raw'] = data['location'].astype(str)
 
@@ -43,11 +46,11 @@ for col, encoder in encoders.items():
 
 # ---------------- Label creation ----------------
 if "applied" in data.columns:
-    # ✅ Real labels available
+
     print("Using real user-applied labels...")
     data['label'] = data['applied']
 else:
-    # ⚡ Simulated labels
+
     print("Using simulated stipend+duration labels...")
     median_stipend = data['max stipend'].median()
     median_duration = data['duration'].median()
@@ -77,6 +80,37 @@ print(f"Accuracy: {acc:.4f}")
 print(f"AUC: {auc:.4f}")
 print("Classification Report:\n", report)
 
+# ---------------- Collect Metrics ----------------
+metrics = {
+    "Accuracy": accuracy_score(y_test, y_pred),
+    "AUC": roc_auc_score(y_test, y_pred_proba),
+    "Precision": precision_score(y_test, y_pred),
+    "Recall": recall_score(y_test, y_pred),
+    "F1-Score": f1_score(y_test, y_pred)
+}
+
+# Print metrics
+print("\n📊 Model Metrics:")
+for k, v in metrics.items():
+    print(f"{k}: {v:.4f}")
+
+# ---------------- Plot Metrics ----------------
+plt.figure(figsize=(8,5))
+plt.bar(metrics.keys(), metrics.values(), color='skyblue', edgecolor='black')
+plt.title("Model Performance Metrics", fontsize=14)
+plt.ylabel("Score", fontsize=12)
+plt.ylim(0, 1) 
+plt.grid(axis='y', linestyle='--', alpha=0.7)
+plt.show()
+
+# ---------------- Confusion Matrix ----------------
+cm = confusion_matrix(y_test, y_pred)
+plt.figure(figsize=(6,5))
+sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=["Predicted 0","Predicted 1"], yticklabels=["Actual 0","Actual 1"])
+plt.title("Confusion Matrix", fontsize=14)
+plt.ylabel("Actual")
+plt.xlabel("Predicted")
+plt.show()
 # ---------------- User query ----------------
 Education = input("Enter your education: ")
 Skills = input("Enter your skills: ")
@@ -102,10 +136,12 @@ filtered_data['score'] = model.predict_proba(filtered_data[features].fillna(0))[
 top_internships = filtered_data.sort_values(by='score', ascending=False).head(3)
 
 # ---------------- Use original text values for output ----------------
-columns_to_show = ['Sector_raw', 'location_raw', 'min stipend', 'max stipend', 'duration', 'score']
+columns_to_show = ['company_name', 'Sector_raw', 'location_raw', 'min stipend', 'max stipend', 'duration', 'score']
+
 best_internships_json = top_internships[columns_to_show].rename(columns={
     "Sector_raw": "Sector",
-    "location_raw": "location"
+    "location_raw": "location",
+    "company_name": "Company"
 }).to_dict(orient="records")
 
 # ---------------- Save & print ----------------
@@ -114,5 +150,6 @@ with open('output.json', 'w', encoding='utf-8') as f:
 
 print("\n🎯 Recommended Internships:")
 print(json.dumps(best_internships_json, indent=4, ensure_ascii=False))
+
 
 
